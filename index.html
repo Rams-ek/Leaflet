@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Tourist Spot</title>
+    <!-- leaflet CSS Reference -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #TRP {
+            width: 100%;
+            height: 100vh;
+
+        }
+
+        .leaflet-popup-content-wrapper {
+            background-color: cornsilk;
+
+        }
+
+        .leaflet-popup-tip {
+            background-color: skyblue;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="TRP"></div> <!--Container of map -->
+</body>
+
+</html>
+
+<!-- Leaflet js -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<!-- <script     src="Json/Ananthagiri.js"></script> -->
+<script src="Json/Area_anathagiri.js"></script>
+<!-- Displaying Map -->
+<script>
+    var map = L.map('TRP').setView([17.30207809832436, 77.86118766747329], 10);
+    var osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    });
+    var googleStreets = L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+    });
+    var googleTerrain = L.tileLayer('https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+    });
+
+    // googleStreets.addTo(map);
+
+    //Set images
+    var myHomeLoc = L.icon({
+        iconUrl: './Images/home.jpeg',
+        iconSize: [40, 40]
+    });
+    var myOfc = L.icon({
+        iconUrl: './Images/ofz.jpeg',
+        iconSize: [40, 40]
+    });
+    var Cloc = L.icon({
+        iconUrl: './Images/C_loc.png',
+        iconSize: [70, 70]
+    });
+
+
+    var home = L.marker([17.41646459843112, 78.50206799808598], { opacity: 0.8, icon: myHomeLoc, title: 'TRF Veetu' })
+    var ofc = L.marker([17.417482, 78.346092], { opacity: 0.8, icon: myOfc, title: 'Waverock' })
+    // Add markers and bind popups
+    home.addTo(map).bindPopup("<b>Home Location:</b><br>" + home.getLatLng());
+    ofc.addTo(map).bindPopup("<b>Office Location:</b><br>" + ofc.getLatLng());
+
+
+
+    // GeoJSON Installation
+    var des_anathagiri = "Ananthagiri Hills is a scenic and popular hill station located near Hyderabad, Telangana, India. It is part of the Rangareddy district and lies about 70 kilometers northeast of Hyderabad. Ananthagiri Hills is known for its lush greenery, cool climate, and beautiful landscapes, making it a favorite weekend getaway for nature lovers, trekking enthusiasts, and those looking to escape the hustle and bustle of the city."
+    var anathagiri_poly = L.geoJson(polygonjson, {
+        onEachFeature: function (feature, layer) {
+            if (feature.geometry.type === "Polygon") {
+                layer.bindPopup("<b>Description:</b> " + des_anathagiri);
+            }
+        },
+        style: function (feature) {
+            // Apply style dynamically or use defaults
+            return {
+                fillColor: feature.properties.fillColor || "green", // Default fill color
+                color: feature.properties.color || "red",      // Default border color
+                weight: 2,                                       // Border thickness
+                opacity: 0.6,                                    // Border opacity
+                fillOpacity: 0.6                                 // Fill opacity
+            };
+        },
+    }).addTo(map);
+    map.addLayer(osm);
+
+// Geolocation
+if (!navigator.geolocation) {
+    console.log("Your browser doesn't support geolocation.");
+} else {
+    // Use watchPosition to get continuous updates without repeated permission prompts
+    navigator.geolocation.watchPosition(Geolocation, handleGeolocationError, {
+        enableHighAccuracy: true,  // Optional: For better accuracy
+        timeout: 1000,  // Set timeout for the request
+        maximumAge: 0    // Set maximum age to 0 to always get the current location
+    });
+}
+
+let lastLocation = null; // To store the last known location to avoid adding duplicate markers
+
+
+    function Geolocation(pos) {
+        var lat = pos.coords.latitude
+        var long = pos.coords.longitude
+        var acc = pos.coords.accuracy
+
+        var cmaker = L.marker([lat, long], { icon: Cloc })
+        var circle = L.circle([lat, long], { radius: acc })
+
+        // map.setView([lat, long],15); //set current loaction to map view
+
+        var groupgeoloc = L.featureGroup([cmaker, circle]).addTo(map);
+        map.fitBounds(groupgeoloc.getBounds()); // fit to geolocation
+    }
+
+
+    function handleGeolocationError(error) {
+        switch (error.code) {
+            case error.PERMISSION_DENIED:
+                alert("User denied the request for geolocation.");
+                break;
+            case error.POSITION_UNAVAILABLE:
+                alert("Location information is unavailable.(Turn on location service)");
+                break;
+            case error.TIMEOUT:
+                alert("The request to get user location timed out.");
+                break;
+            case error.UNKNOWN_ERROR:
+                alert("An unknown error occurred.");
+                break;
+            default:
+                alert("Geolocation error: " + error.message);
+        }
+        console.error("Geolocation Error:", error);
+    }
+
+    // Layer Control
+
+    var baseMap = {
+        "Open Street Map": osm,
+        "Google Street Map": googleStreets,
+        "Google Terrain Map": googleTerrain
+    }
+
+    var overlayMap = {
+        "Home": home,
+        "Office": ofc,
+        "Anathagiri Trip": anathagiri_poly
+    }
+    L.control.layers(baseMap, overlayMap).addTo(map)
+
+</script>
