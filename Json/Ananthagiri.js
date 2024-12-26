@@ -1,0 +1,1 @@
+var pointjson = {"type":"FeatureCollection","features":[{"type":"Feature","properties":{},"geometry":{"coordinates":[77.86139684724469,17.3211986201473],"type":"Point"}}]}
