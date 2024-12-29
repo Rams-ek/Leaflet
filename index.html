@@ -8,6 +8,10 @@
     <!-- leaflet CSS Reference -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+    <!-- Leaflet routing machine CSS by Per Liedman  -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+
     <style>
         body {
             margin: 0;
@@ -17,12 +21,10 @@
         #TRP {
             width: 100%;
             height: 100vh;
-
         }
 
         .leaflet-popup-content-wrapper {
             background-color: cornsilk;
-
         }
 
         .leaflet-popup-tip {
@@ -40,7 +42,11 @@
 <!-- Leaflet js -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<!-- <script     src="Json/Ananthagiri.js"></script> -->
+
+<!-- Leaflet routing machine js -->
+<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+
+<!-- <script src="Json/Ananthagiri.js"></script> -->
 <script src="Json/Area_anathagiri.js"></script>
 <!-- Displaying Map -->
 <script>
@@ -57,9 +63,7 @@
         subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
     });
 
-    // googleStreets.addTo(map);
-
-    //Set images
+    // Set images for markers
     var myHomeLoc = L.icon({
         iconUrl: './Images/home.jpeg',
         iconSize: [40, 40]
@@ -73,14 +77,12 @@
         iconSize: [70, 70]
     });
 
-
     var home = L.marker([17.41646459843112, 78.50206799808598], { opacity: 0.8, icon: myHomeLoc, title: 'TRF Veetu' })
     var ofc = L.marker([17.417482, 78.346092], { opacity: 0.8, icon: myOfc, title: 'Waverock' })
+
     // Add markers and bind popups
     home.addTo(map).bindPopup("<b>Home Location:</b><br>" + home.getLatLng());
     ofc.addTo(map).bindPopup("<b>Office Location:</b><br>" + ofc.getLatLng());
-
-
 
     // GeoJSON Installation
     var des_anathagiri = "Ananthagiri Hills is a scenic and popular hill station located near Hyderabad, Telangana, India. It is part of the Rangareddy district and lies about 70 kilometers northeast of Hyderabad. Ananthagiri Hills is known for its lush greenery, cool climate, and beautiful landscapes, making it a favorite weekend getaway for nature lovers, trekking enthusiasts, and those looking to escape the hustle and bustle of the city."
@@ -91,47 +93,104 @@
             }
         },
         style: function (feature) {
-            // Apply style dynamically or use defaults
             return {
-                fillColor: feature.properties.fillColor || "green", // Default fill color
-                color: feature.properties.color || "red",      // Default border color
-                weight: 2,                                       // Border thickness
-                opacity: 0.6,                                    // Border opacity
-                fillOpacity: 0.6                                 // Fill opacity
+                fillColor: feature.properties.fillColor || "green",
+                color: feature.properties.color || "red",
+                weight: 2,
+                opacity: 0.6,
+                fillOpacity: 0.6
             };
         },
     }).addTo(map);
     map.addLayer(osm);
 
-// Geolocation
-if (!navigator.geolocation) {
-    console.log("Your browser doesn't support geolocation.");
-} else {
-    // Use watchPosition to get continuous updates without repeated permission prompts
-    navigator.geolocation.watchPosition(Geolocation, handleGeolocationError, {
-        enableHighAccuracy: true,  // Optional: For better accuracy
-        timeout: 1000,  // Set timeout for the request
-        maximumAge: 0    // Set maximum age to 0 to always get the current location
-    });
-}
-
-let lastLocation = null; // To store the last known location to avoid adding duplicate markers
-
-
-    function Geolocation(pos) {
-        var lat = pos.coords.latitude
-        var long = pos.coords.longitude
-        var acc = pos.coords.accuracy
-
-        var cmaker = L.marker([lat, long], { icon: Cloc })
-        var circle = L.circle([lat, long], { radius: acc })
-
-        // map.setView([lat, long],15); //set current loaction to map view
-
-        var groupgeoloc = L.featureGroup([cmaker, circle]).addTo(map);
-        map.fitBounds(groupgeoloc.getBounds()); // fit to geolocation
+    // Geolocation setup
+    if (!navigator.geolocation) {
+        console.log("Your browser doesn't support geolocation.");
+    } else {
+        navigator.geolocation.watchPosition(Geolocation, handleGeolocationError, {
+            enableHighAccuracy: true,
+            timeout: 5000,
+            maximumAge: 0
+        });
     }
 
+    let lastLocation = null;  // Store the last known location
+    let routeControl = null;  // Routing control reference
+    let hasCentered = false;  // Flag for centering map
+    let currentLocationMarkers = null;  // Store current location markers and circle
+    let destinationMarker = null;  // Store the destination marker
+
+    // Click event flag to avoid multiple confirmations
+    let clickListenerAdded = false;
+
+    function Geolocation(pos) {
+        var lat = pos.coords.latitude;
+        var long = pos.coords.longitude;
+        var acc = pos.coords.accuracy;
+
+        // Remove the old marker and circle if they exist
+        if (currentLocationMarkers) {
+            map.removeLayer(currentLocationMarkers);
+        }
+
+        // Create a new marker and circle for the current location
+        var cmaker = L.marker([lat, long], { icon: Cloc });
+        var circle = L.circle([lat, long], { radius: acc });
+
+        // Create a feature group and add it to the map
+        currentLocationMarkers = L.featureGroup([cmaker, circle]).addTo(map);
+
+        // Center the map to the current location if not already centered
+        if (!hasCentered) {
+            map.setView([lat, long], 15);
+            hasCentered = true;
+        }
+
+        // Ensure route control persists and update its waypoints without resetting
+        if (routeControl) {
+            routeControl.setWaypoints([L.latLng(lat, long), routeControl.getWaypoints()[1]]);
+        }
+
+        // Add click event listener for destination selection once
+        if (!clickListenerAdded) {
+            map.on('click', function (e) {
+                var destinationLatLng = e.latlng;
+                console.log("Destination selected: ", destinationLatLng);
+
+                // Confirm destination with the user
+                var isConfirmed = window.confirm(`Do you want to set this location as your destination?\nLatitude: ${destinationLatLng.lat}\nLongitude: ${destinationLatLng.lng}`);
+
+                if (isConfirmed) {
+                    // Remove previous destination marker if it exists
+                    if (destinationMarker) {
+                        map.removeLayer(destinationMarker);
+                    }
+
+                    // Create and add the new destination marker
+                    destinationMarker = L.marker(destinationLatLng).addTo(map);
+                    destinationMarker.bindPopup("<b>Destination</b><br>" + destinationLatLng);
+
+                    // Update the route control with new destination
+                    if (routeControl) {
+                        routeControl.setWaypoints([L.latLng(lat, long), destinationLatLng]);
+                    } else {
+                        // Initialize route control if it doesn't exist
+                        routeControl = L.Routing.control({
+                            waypoints: [
+                                L.latLng(lat, long),
+                                destinationLatLng
+                            ],
+                            createMarker: function () { return null; },
+                            routeWhileDragging: true
+                        }).addTo(map);
+                    }
+                }
+            });
+
+            clickListenerAdded = true;  // Ensure listener is added only once
+        }
+    }
 
     function handleGeolocationError(error) {
         switch (error.code) {
@@ -139,7 +198,7 @@ let lastLocation = null; // To store the last known location to avoid adding dup
                 alert("User denied the request for geolocation.");
                 break;
             case error.POSITION_UNAVAILABLE:
-                alert("Location information is unavailable.(Turn on location service)");
+                alert("Location information is unavailable. Turn on location service");
                 break;
             case error.TIMEOUT:
                 alert("The request to get user location timed out.");
@@ -153,8 +212,7 @@ let lastLocation = null; // To store the last known location to avoid adding dup
         console.error("Geolocation Error:", error);
     }
 
-    // Layer Control
-
+    // Layer control setup
     var baseMap = {
         "Open Street Map": osm,
         "Google Street Map": googleStreets,
@@ -166,6 +224,6 @@ let lastLocation = null; // To store the last known location to avoid adding dup
         "Office": ofc,
         "Anathagiri Trip": anathagiri_poly
     }
-    L.control.layers(baseMap, overlayMap).addTo(map)
 
+    L.control.layers(baseMap, overlayMap).addTo(map);
 </script>
